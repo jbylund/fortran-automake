@@ -1,0 +1,94 @@
+#!/usr/bin/perl
+# this file will accept a number of -D flags and a filename and will output the dependencies for that file
+
+use strict;
+
+# first loop over the arguments
+my $argument;
+my $dflags = "";
+my @fileslist = ();
+
+while($argument = shift)
+{
+  if($argument =~ m/^\-/)
+  {
+    $dflags = "$dflags $argument";
+  }
+  else
+  {
+    push(@fileslist,$argument);
+  }
+}
+
+@fileslist = sort(@fileslist);
+
+my $mod_ext    = '$(mod_ext)';
+my $mod_prefix = '$(mod_dir)';
+my $obj_ext    = '.o';
+my $obj_prefix = '$(obj_dir)';
+
+my $current_file;
+my $current_object;
+my $is_module = 0;
+my @uses;
+for(my $i = 0; $i < scalar(@fileslist); ++$i)
+{
+  $current_file = $fileslist[$i]; # this is the source file
+  if(! -e "$current_file")
+  {
+    print STDERR "$current_file does not exist.\n";
+    next;
+  }
+
+  if($current_file =~ m/\..*\./)
+  {
+    print STDERR "$current_file has two dots, looks like a temp file, skipping.\n";
+    next;
+  }
+
+  $is_module = `grep -Eci '^\\W{6,}module' $current_file`;
+  chomp($is_module);
+
+  $current_object = $current_file;
+  $current_object =~ s/\.F//; # strip the .F
+  $current_object =~ s/.*\///; # strip the directory (src/src_academic)
+  if($is_module)
+  {
+    $current_object =~ s/_mod//; # strip the _mod
+    $current_object = "${mod_prefix}/$current_object${mod_ext}";
+  }
+  else
+  {
+    $current_object = "${obj_prefix}/$current_object${obj_ext}";
+  }
+
+  my $pattern = "^ {6,}use |^#";
+  system("grep -Ei \"$pattern\" $current_file > .tmpfile");
+  @uses = `cpp -I src -P $dflags .tmpfile`;
+  for(my $j = 0; $j < scalar(@uses); ++$j)
+  {
+    $uses[$j] = lc($uses[$j]);
+    $uses[$j] =~ s/\s*use\s*//; # remove the use wrapped in spaces
+    $uses[$j] =~ s/,.*//; # remove from the comma to the end
+    $uses[$j] =~ s/^\s*//g; # remove leading white space
+    $uses[$j] =~ s/\s.*//g; # trailing whitespace and anything else
+    chomp($uses[$j]);
+  }
+  @uses = uniq(@uses);
+  @uses = sort(@uses);
+
+  print "$current_object : $current_file ";
+  for(my $j = 0; $j < scalar(@uses); ++$j)
+  {
+    if(0 == length(${uses[$j]})){next;}
+    print "${mod_prefix}/${uses[$j]}${mod_ext} ";
+  }
+  print "\n";
+}
+print '	$(compiler) -o $@ $(flags) $(Dflags) $<';
+print "\n";
+
+sub uniq
+{
+  return keys %{{ map { $_ => 1 } @_ }};
+}
