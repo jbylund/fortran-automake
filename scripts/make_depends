@@ -22,6 +22,12 @@ while($argument = shift)
 
 @fileslist = sort(@fileslist);
 
+if(0 == scalar(@fileslist))
+{
+    print STDERR "No source files, quitting make_depends.\n";
+	exit(1);
+}
+
 my $mod_ext    = '$(mod_ext)';
 my $mod_prefix = '$(mod_dir)';
 my $obj_ext    = '.o';
